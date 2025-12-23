@@ -1,0 +1,8 @@
+# 本地私有文件，不上传到 GitHub
+*.xlsx
+*.py
+logo.png
+dashboard.html
+.DS_Store
+GitHub_Pages_部署步骤.md
+部署说明.md
