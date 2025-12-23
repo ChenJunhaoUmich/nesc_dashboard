@@ -9,7 +9,9 @@ ROOT = Path(__file__).resolve().parent
 EXCEL_PATH = ROOT / "作图数据整理.xlsx"
 PBROE_PATH = ROOT / "PB-ROE和资产组合净值.xlsx"
 LOGO_PATH = ROOT / "logo.png"
-OUTPUT_HTML = ROOT / "dashboard.html"
+# 输出的主页面文件名（GitHub Pages 默认会使用 index.html 作为首页）
+DASHBOARD_HTML = ROOT / "dashboard.html"
+INDEX_HTML = ROOT / "index.html"
 
 
 def sheet_to_records(df):
@@ -1630,8 +1632,12 @@ def build_html(data_by_sheet, chart_configs):
 def main():
     data_by_sheet, chart_configs = build_data_and_config()
     html = build_html(data_by_sheet, chart_configs)
-    OUTPUT_HTML.write_text(html, encoding="utf-8")
-    print(f"已生成网页文件: {OUTPUT_HTML}")
+
+    # 同时生成 dashboard.html 和 index.html，内容完全一致
+    DASHBOARD_HTML.write_text(html, encoding="utf-8")
+    INDEX_HTML.write_text(html, encoding="utf-8")
+    print(f"已生成网页文件: {DASHBOARD_HTML}")
+    print(f"已生成首页文件: {INDEX_HTML}")
 
 
 if __name__ == "__main__":
