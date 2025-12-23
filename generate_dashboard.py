@@ -1137,7 +1137,7 @@ def build_html(data_by_sheet, chart_configs):
         ];
         
         layout = {{
-          margin: {{ t: 20, r: 40, b: 60, l: 60 }},
+          margin: {{ t: 20, r: 15, b: 60, l: 60 }},
           showlegend: false,
           dragmode: 'zoom',
           plot_bgcolor: 'white',
