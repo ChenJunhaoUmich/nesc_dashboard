@@ -507,7 +507,8 @@ def build_html(data_by_sheet, chart_configs):
       flex-direction: column;
       background: #ffffff;
       border-radius: 4px;
-      padding: 16px;
+      /* 让标题更贴近左边界：缩小内边距 */
+      padding: 12px 12px 16px 12px;
     }}
     .chart-header {{
       display: flex;
@@ -745,6 +746,7 @@ def build_html(data_by_sheet, chart_configs):
   <script>
     const dataBySheet = {data_json};
     const chartConfigs = {config_json};
+    // 记录每个图是否已经创建，避免重复创建以及在隐藏状态下创建导致尺寸异常
     const chartInstances = {{}};
 
     // 下载图表数据为CSV（原始Excel表格数据）
@@ -1216,9 +1218,11 @@ def build_html(data_by_sheet, chart_configs):
         const isFund1Chart = cfg.id === 'fund1';
         const isFund2Chart = cfg.id === 'fund2';
         const isRisk1Chart = cfg.id === 'risk1';
+        // 如果没有右轴，右侧 margin 可以更紧凑
+        const rightMargin = hasY2 ? 70 : 15;
 
         layout = {{
-          margin: {{ t: 30, r: 70, b: 80, l: 70 }},
+          margin: {{ t: 30, r: rightMargin, b: 80, l: 70 }},
           showlegend: false,
           dragmode: 'zoom',
           plot_bgcolor: 'white',
@@ -1275,6 +1279,7 @@ def build_html(data_by_sheet, chart_configs):
         }};
 
         if (hasY2) {{
+          const y2TitleText = isFund1Chart ? 'Wind全A收盘价' : (isFund2Chart ? 'Wind全A收盘价' : (isRisk1Chart ? '上证综指' : ''));
           layout.yaxis2 = {{
             overlaying: 'y',
             side: 'right',
@@ -1283,10 +1288,7 @@ def build_html(data_by_sheet, chart_configs):
             linecolor: '#ecf0f1',
             linewidth: 1,
             mirror: true,
-            title: {{
-              text: isFund1Chart ? 'Wind全A收盘价' : (isFund2Chart ? 'Wind全A收盘价' : (isRisk1Chart ? '上证综指' : '')),
-              standoff: 30
-            }},
+            title: y2TitleText ? {{ text: y2TitleText, standoff: 15 }} : undefined,
             titlefont: {{ color: '#666666', size: 15 }},
             tickfont: {{ color: '#666666' }},
             zeroline: false,
@@ -1300,6 +1302,9 @@ def build_html(data_by_sheet, chart_configs):
         displaylogo: false,
         modeBarButtonsToRemove: ['toImage']
       }}).then(() => {{
+        // 标记该图表已创建
+        chartInstances[cfg.id] = true;
+
         // 对于有双坐标轴的图表，手动触发resize以确保正确布局
         if (hasY2) {{
           setTimeout(() => {{
@@ -1439,12 +1444,12 @@ def build_html(data_by_sheet, chart_configs):
         container.appendChild(section);
       }});
 
-      // 创建所有图表
-      Object.keys(chartConfigs).forEach(category => {{
-        chartConfigs[category].forEach(cfg => {{
+      // 仅为第一个板块创建图表，其余板块在首次点击导航时再创建，避免在隐藏状态下绘制导致初始尺寸过小
+      if (firstCategory && chartConfigs[firstCategory].length > 0) {{
+        chartConfigs[firstCategory].forEach(cfg => {{
           createChart(cfg, `plot-${{cfg.id}}`);
         }});
-      }});
+      }}
       
       // 默认激活第一个图表的导航项
       if (firstCategory && chartConfigs[firstCategory].length > 0) {{
@@ -1569,6 +1574,13 @@ def build_html(data_by_sheet, chart_configs):
         
         // 找到目标图表元素并滚动到它
         setTimeout(() => {{
+          // 如果该图表还未创建，先创建一次，保证在可见状态下初始化，避免“先小后大”的闪烁
+          if (!chartInstances[chartId] && chartConfigs[category]) {{
+            const cfg = chartConfigs[category].find(c => c.id === chartId);
+            if (cfg) {{
+              createChart(cfg, `plot-${{cfg.id}}`);
+            }}
+          }}
           const targetChart = document.getElementById(`chart-${{chartId}}`);
           const sectionCharts = targetSection.querySelector('.section-charts');
           
@@ -1585,7 +1597,7 @@ def build_html(data_by_sheet, chart_configs):
             
             // 触发图表resize，确保双坐标轴图表正确布局
             const chartDiv = document.getElementById(`plot-${{chartId}}`);
-            if (chartDiv && chartDiv.data) {{
+            if (chartDiv && chartInstances[chartId]) {{
               setTimeout(() => {{
                 Plotly.Plots.resize(`plot-${{chartId}}`);
               }}, 100);
@@ -1599,7 +1611,7 @@ def build_html(data_by_sheet, chart_configs):
       Object.keys(chartConfigs).forEach(category => {{
         chartConfigs[category].forEach(cfg => {{
           const chartDiv = document.getElementById(`plot-${{cfg.id}}`);
-          if (chartDiv && chartDiv.data) {{
+          if (chartDiv && chartInstances[cfg.id]) {{
             Plotly.Plots.resize(`plot-${{cfg.id}}`);
           }}
         }});
@@ -1615,7 +1627,7 @@ def build_html(data_by_sheet, chart_configs):
         Object.keys(chartConfigs).forEach(category => {{
           chartConfigs[category].forEach(cfg => {{
             const chartDiv = document.getElementById(`plot-${{cfg.id}}`);
-            if (chartDiv && chartDiv.data) {{
+            if (chartDiv && chartInstances[cfg.id]) {{
               Plotly.Plots.resize(`plot-${{cfg.id}}`);
             }}
           }});
