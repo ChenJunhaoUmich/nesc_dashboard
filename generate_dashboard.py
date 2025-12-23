@@ -453,7 +453,7 @@ def build_html(data_by_sheet, chart_configs):
       flex-direction: column;
       background: #ffffff;
       border-radius: 4px;
-      padding: 4px 20px 20px 20px;
+      padding: 4px 10px 4px 10px;
       flex: 1;
       min-height: 0;
     }}
@@ -508,7 +508,7 @@ def build_html(data_by_sheet, chart_configs):
       background: #ffffff;
       border-radius: 4px;
       /* 让标题更贴近左边界：缩小内边距 */
-      padding: 12px 12px 16px 12px;
+      padding: 0px 16px 16px 0px;
     }}
     .chart-header {{
       display: flex;
