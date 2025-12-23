@@ -1,6 +1,5 @@
 # 本地私有文件，不上传到 GitHub
 *.xlsx
-*.py
 logo.png
 dashboard.html
 .DS_Store
