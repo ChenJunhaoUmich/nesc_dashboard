@@ -1571,16 +1571,18 @@ def build_html(data_by_sheet, chart_configs):
       const targetSection = document.getElementById(`section-${{category}}`);
       if (targetSection) {{
         targetSection.classList.add('active');
+
+        // 当前板块的所有图表在可见状态下一次性创建，避免逐个点击才渲染
+        if (chartConfigs[category]) {{
+          chartConfigs[category].forEach(cfg => {{
+            if (!chartInstances[cfg.id]) {{
+              createChart(cfg, `plot-${{cfg.id}}`);
+            }}
+          }});
+        }}
         
         // 找到目标图表元素并滚动到它
         setTimeout(() => {{
-          // 如果该图表还未创建，先创建一次，保证在可见状态下初始化，避免“先小后大”的闪烁
-          if (!chartInstances[chartId] && chartConfigs[category]) {{
-            const cfg = chartConfigs[category].find(c => c.id === chartId);
-            if (cfg) {{
-              createChart(cfg, `plot-${{cfg.id}}`);
-            }}
-          }}
           const targetChart = document.getElementById(`chart-${{chartId}}`);
           const sectionCharts = targetSection.querySelector('.section-charts');
           
