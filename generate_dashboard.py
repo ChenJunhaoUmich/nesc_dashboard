@@ -18,9 +18,30 @@ def sheet_to_records(df):
     """Convert DataFrame to plain Python records with JSON‑friendly values."""
 
     def convert_value(v):
-        # Convert timestamps / dates to string, leave other scalars as‑is
+        # Convert timestamps / dates to string, only keep date part (YYYY-MM-DD)
         if hasattr(v, "isoformat"):
-            return v.isoformat()
+            # 如果是日期/时间类型，只返回日期部分，不包含时间
+            if hasattr(v, "date"):
+                # datetime 类型，只取日期部分
+                return v.date().isoformat()
+            else:
+                # date 类型，直接格式化
+                return v.isoformat()
+        
+        # 处理字符串格式的日期（包含时间部分的情况）
+        if isinstance(v, str):
+            # 如果字符串是 ISO 格式日期时间（如 "2016-01-04T00:00:00"），只保留日期部分
+            if "T" in v and len(v) > 10:
+                # 提取日期部分（YYYY-MM-DD）
+                date_part = v.split("T")[0]
+                # 验证是否是有效的日期格式
+                try:
+                    from datetime import datetime
+                    datetime.strptime(date_part, "%Y-%m-%d")
+                    return date_part
+                except ValueError:
+                    pass
+        
         return v
 
     records = []
@@ -931,91 +952,192 @@ def build_html(data_by_sheet, chart_configs):
     }}
 
     // 下载所有数据
+    // 清理 Excel sheet 名称中的非法字符
+    function sanitizeSheetName(name) {{
+      if (!name) return 'Sheet';
+      // Excel sheet 名称不能包含: \ / ? * [ ]
+      let sanitized = name.replace(/[\\/?:*\\[\\]]/g, '');
+      // 移除首尾的单引号
+      sanitized = sanitized.replace(/^['"]+|['"]+$/g, '');
+      // 如果清理后为空，使用默认名称
+      if (!sanitized || sanitized.trim() === '') {{
+        sanitized = 'Sheet';
+      }}
+      // Excel限制sheet名称最多31个字符
+      if (sanitized.length > 31) {{
+        sanitized = sanitized.substring(0, 31);
+      }}
+      return sanitized;
+    }}
+
     function downloadAllData() {{
-      // 检查xlsx库是否加载
-      if (typeof XLSX === 'undefined') {{
-        alert('Excel库加载失败，请刷新页面重试');
-        return;
-      }}
-      
-      // 创建工作簿
-      const workbook = XLSX.utils.book_new();
-      
-      // 收集所有图表的数据，每个图表作为一个sheet
-      let hasData = false;
-      
-      Object.keys(chartConfigs).forEach(category => {{
-        chartConfigs[category].forEach((cfg, idx) => {{
-          const records = dataBySheet[cfg.sheet] || [];
-          if (records.length > 0) {{
-            hasData = true;
-            
-            // 获取所有列名
-            const headers = Object.keys(records[0] || {{}});
-            if (headers.length > 0) {{
-              // 准备数据：第一行是表头，后面是数据行
-              const sheetData = [headers];
+      try {{
+        // 检查xlsx库是否加载
+        if (typeof XLSX === 'undefined') {{
+          alert('Excel库加载失败，请刷新页面重试');
+          console.error('XLSX library is not loaded');
+          return;
+        }}
+        
+        // 创建工作簿
+        const workbook = XLSX.utils.book_new();
+        
+        // 用于跟踪已使用的 sheet 名称，避免重复
+        const usedSheetNames = new Set();
+        
+        // 收集所有图表的数据，每个图表作为一个sheet
+        let hasData = false;
+        
+        Object.keys(chartConfigs).forEach(category => {{
+          chartConfigs[category].forEach((cfg, idx) => {{
+            const records = dataBySheet[cfg.sheet] || [];
+            if (records.length > 0) {{
+              hasData = true;
               
-              records.forEach(record => {{
-                const row = headers.map(header => {{
-                  const value = record[header];
-                  return value === null || value === undefined ? '' : value;
+              // 获取所有列名
+              const headers = Object.keys(records[0] || {{}});
+              if (headers.length > 0) {{
+                // 准备数据：第一行是表头，后面是数据行
+                const sheetData = [headers];
+                
+                // 识别日期列（通过列名判断）
+                const dateColumns = new Set();
+                headers.forEach(header => {{
+                  const headerLower = String(header).toLowerCase();
+                  if (headerLower.includes('date') || headerLower.includes('日期') || 
+                      headerLower.includes('trade_dt') || headerLower === 'date' ||
+                      headerLower === 'trade_dt' || headerLower.includes('dt')) {{
+                    dateColumns.add(header);
+                  }}
                 }});
-                sheetData.push(row);
-              }});
-              
-              // 创建工作表
-              const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
-              
-              // 生成sheet名称：根据category和顺序索引生成标识，然后加上title
-              // 使用索引+1作为图表编号（从1开始）
-              const chartNum = (idx + 1).toString();
-              
-              // 根据category生成标识前缀
-              let prefix = '';
-              if (category === '因子') {{
-                prefix = '因子图' + chartNum;
-              }} else if (category === '资金') {{
-                prefix = '资金图' + chartNum;
-              }} else if (category === '风险') {{
-                prefix = '风险图' + chartNum;
-              }} else if (category === '量化资产配置') {{
-                prefix = '量化资产配置图' + chartNum;
-              }}
-              
-              // 组合标识和标题
-              let sheetName = prefix;
-              if (cfg.title) {{
-                // 如果sheet名称已经包含标题，直接使用sheet名称
-                if (cfg.sheet && cfg.sheet.includes(cfg.title)) {{
-                  sheetName = cfg.sheet;
-                }} else {{
-                  sheetName = prefix + '-' + cfg.title;
+                
+                records.forEach(record => {{
+                  const row = headers.map(header => {{
+                    let value = record[header];
+                    
+                    // 处理 null 和 undefined
+                    if (value === null || value === undefined) {{
+                      return '';
+                    }}
+                    
+                    // 日期列：保持原始格式，不进行数字转换
+                    if (dateColumns.has(header)) {{
+                      // 如果是日期列，保持原始字符串格式
+                      return String(value);
+                    }}
+                    
+                    // 处理日期格式字符串（非日期列但可能是日期值）
+                    if (typeof value === 'string') {{
+                      // 检查是否是日期格式（ISO 格式或其他常见日期格式）
+                      const datePatterns = [
+                        /^\\d{4}-\\d{2}-\\d{2}/,  // ISO: 2024-01-01
+                        /^\\d{4}\\/\\d{2}\\/\\d{2}/,  // 2024/01/01
+                        /^\\d{4}\\.\\d{2}\\.\\d{2}/,  // 2024.01.01
+                        /^\\d{4}-\\d{2}-\\d{2}T/,  // ISO with time
+                      ];
+                      
+                      const isDateString = datePatterns.some(pattern => pattern.test(value));
+                      if (isDateString) {{
+                        // 保持日期字符串格式
+                        return value;
+                      }}
+                      
+                      // 检查是否是纯数字字符串（不是日期）
+                      const numValue = parseFloat(value);
+                      if (!isNaN(numValue) && isFinite(numValue) && value.trim() !== '' && 
+                          !isDateString && !value.includes('-') && !value.includes('/')) {{
+                        // 如果字符串是纯数字且不是日期，转换为数字类型
+                        return numValue;
+                      }}
+                    }}
+                    
+                    // 处理数字：确保是有效的数字
+                    if (typeof value === 'number') {{
+                      if (isNaN(value) || !isFinite(value)) {{
+                        return '';
+                      }}
+                      return value;
+                    }}
+                    
+                    // 其他情况保持原值
+                    return value;
+                  }});
+                  sheetData.push(row);
+                }});
+                
+                // 创建工作表
+                const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
+                
+                // 设置列宽（可选，但有助于 Excel 正确识别格式）
+                const colWidths = headers.map(() => ({{ wch: 15 }}));
+                worksheet['!cols'] = colWidths;
+                
+                // 生成sheet名称：根据category和顺序索引生成标识，然后加上title
+                // 使用索引+1作为图表编号（从1开始）
+                const chartNum = (idx + 1).toString();
+                
+                // 根据category生成标识前缀
+                let prefix = '';
+                if (category === '因子') {{
+                  prefix = '因子图' + chartNum;
+                }} else if (category === '资金') {{
+                  prefix = '资金图' + chartNum;
+                }} else if (category === '风险') {{
+                  prefix = '风险图' + chartNum;
+                }} else if (category === '量化资产配置') {{
+                  prefix = '量化资产配置图' + chartNum;
                 }}
-              }} else {{
-                // 如果没有title，使用sheet名称
-                sheetName = cfg.sheet || prefix;
+                
+                // 组合标识和标题
+                let sheetName = prefix;
+                if (cfg.title) {{
+                  // 如果sheet名称已经包含标题，直接使用sheet名称
+                  if (cfg.sheet && cfg.sheet.includes(cfg.title)) {{
+                    sheetName = cfg.sheet;
+                  }} else {{
+                    sheetName = prefix + '-' + cfg.title;
+                  }}
+                }} else {{
+                  // 如果没有title，使用sheet名称
+                  sheetName = cfg.sheet || prefix;
+                }}
+                
+                // 清理 sheet 名称中的非法字符
+                sheetName = sanitizeSheetName(sheetName);
+                
+                // 处理重复的 sheet 名称
+                let finalSheetName = sheetName;
+                let counter = 1;
+                while (usedSheetNames.has(finalSheetName)) {{
+                  const suffix = counter.toString();
+                  const maxLength = 31 - suffix.length - 1;
+                  finalSheetName = sheetName.substring(0, maxLength) + '_' + suffix;
+                  counter++;
+                }}
+                usedSheetNames.add(finalSheetName);
+                
+                // 将工作表添加到工作簿
+                XLSX.utils.book_append_sheet(workbook, worksheet, finalSheetName);
               }}
-              
-              // Excel限制sheet名称最多31个字符
-              if (sheetName.length > 31) {{
-                sheetName = sheetName.substring(0, 31);
-              }}
-              
-              // 将工作表添加到工作簿
-              XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
             }}
-          }}
+          }});
         }});
-      }});
-      
-      if (!hasData) {{
-        alert('没有可下载的数据');
-        return;
+        
+        if (!hasData) {{
+          alert('没有可下载的数据');
+          console.warn('No data available for download');
+          return;
+        }}
+        
+        // 生成Excel文件并下载
+        XLSX.writeFile(workbook, '所有图表数据.xlsx', {{
+          bookType: 'xlsx'
+        }});
+        console.log('Excel file downloaded successfully');
+      }} catch (error) {{
+        console.error('Error in downloadAllData:', error);
+        alert('下载失败：' + error.message);
       }}
-      
-      // 生成Excel文件并下载
-      XLSX.writeFile(workbook, '所有图表数据.xlsx');
     }}
 
     // 显示/隐藏分享对话框
@@ -1824,13 +1946,19 @@ def build_html(data_by_sheet, chart_configs):
       // 下载按钮
       const downloadBtn = document.createElement('div');
       downloadBtn.className = 'sidebar-action';
-      downloadBtn.onclick = downloadAllData;
+      downloadBtn.onclick = function(e) {{
+        e.preventDefault();
+        e.stopPropagation();
+        downloadAllData();
+      }};
       const downloadIcon = document.createElement('div');
       downloadIcon.className = 'sidebar-action-icon';
       downloadIcon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>';
+      downloadIcon.style.pointerEvents = 'none';
       downloadBtn.appendChild(downloadIcon);
       const downloadText = document.createElement('span');
       downloadText.textContent = '下载';
+      downloadText.style.pointerEvents = 'none';
       downloadBtn.appendChild(downloadText);
       footer.appendChild(downloadBtn);
 
