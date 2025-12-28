@@ -198,7 +198,7 @@ def build_data_and_config():
                 "x": "预测ROE",
                 "y": "预测PB",
                 "text": "名称",
-                "description": "• X轴（预测ROE）：预测的净资产收益率，反映公司的盈利能力\n• Y轴（预测PB）：预测的市净率，反映公司的估值水平\n• 散点：每个散点代表一只股票，散点上的文字为股票名称",
+                "description": "• X轴（预测ROE）：预测的净资产收益率，反映公司的盈利能力\n• Y轴（预测PB）：预测的市净率，反映公司的估值水平\n• 散点：每个散点代表一个板块，散点上的文字为板块名称",
             },
         ],
         "量化资产配置": [
@@ -895,27 +895,38 @@ def build_html(data_by_sheet, chart_configs):
           
           // 查找对应的线条名称
           if (cfg.lines) {{
+            // 先尝试精确匹配：提取冒号前的部分
+            const colonIndex = text.indexOf('：');
+            const beforeColon = colonIndex > 0 ? text.substring(0, colonIndex).trim() : text.trim();
+            
+            // 优先精确匹配
             for (let lineCfg of cfg.lines) {{
-              if (text.includes(lineCfg.name)) {{
+              if (beforeColon === lineCfg.name) {{
                 lineName = lineCfg.name;
                 color = getLineColor(cfg, lineName);
                 break;
               }}
             }}
-          }}
-          
-          // 如果没有找到匹配的线条，尝试从文本中提取（去掉括号中的颜色说明）
-          if (!color) {{
-            const match = text.match(/^([^（(]+)/);
-            if (match) {{
-              const name = match[1].trim();
-              if (cfg.lines) {{
-                for (let lineCfg of cfg.lines) {{
-                  if (name.includes(lineCfg.name) || lineCfg.name.includes(name)) {{
-                    lineName = lineCfg.name;
-                    color = getLineColor(cfg, lineName);
-                    break;
-                  }}
+            
+            // 如果精确匹配失败，尝试包含匹配
+            if (!color) {{
+              for (let lineCfg of cfg.lines) {{
+                // 检查文本开头是否包含线条名称，或者线条名称是否包含在冒号前的文本中
+                if (beforeColon.includes(lineCfg.name) || text.includes(lineCfg.name)) {{
+                  lineName = lineCfg.name;
+                  color = getLineColor(cfg, lineName);
+                  break;
+                }}
+              }}
+            }}
+            
+            // 如果还没找到，尝试双向包含匹配
+            if (!color) {{
+              for (let lineCfg of cfg.lines) {{
+                if (lineCfg.name.includes(beforeColon) || beforeColon.includes(lineCfg.name)) {{
+                  lineName = lineCfg.name;
+                  color = getLineColor(cfg, lineName);
+                  break;
                 }}
               }}
             }}
