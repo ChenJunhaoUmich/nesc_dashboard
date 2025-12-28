@@ -56,10 +56,17 @@ def build_data_and_config():
     
     # 读取PB-ROE数据
     if PBROE_PATH.exists():
-        pb_roe_df = pd.read_excel(PBROE_PATH, sheet_name="PB-ROE")
-        # 重命名列，使用Unnamed: 1作为名称
-        pb_roe_df = pb_roe_df.rename(columns={"Unnamed: 1": "名称"})
-        data_by_sheet["PB-ROE"] = sheet_to_records(pb_roe_df)
+        pb_roe_xls = pd.ExcelFile(PBROE_PATH)
+        if "PB-ROE" in pb_roe_xls.sheet_names:
+            pb_roe_df = pd.read_excel(PBROE_PATH, sheet_name="PB-ROE")
+            # 重命名列，使用Unnamed: 1作为名称
+            pb_roe_df = pb_roe_df.rename(columns={"Unnamed: 1": "名称"})
+            data_by_sheet["PB-ROE"] = sheet_to_records(pb_roe_df)
+        
+        # 读取资产配置净值数据
+        if "资产配置净值" in pb_roe_xls.sheet_names:
+            asset_df = pd.read_excel(PBROE_PATH, sheet_name="资产配置净值")
+            data_by_sheet["资产配置净值"] = sheet_to_records(asset_df)
 
     # 图表配置：说明每张图的 x 轴、y 轴字段及含义
     chart_configs = {
@@ -70,7 +77,7 @@ def build_data_and_config():
                 "displayTitle": "外币资金占货币资金比因子 vs 基准",
                 "sheet": "因子图1",
                 "x": "trade_dt",
-                "description": "• 外币资金占货币资金比因子：反映公司外币资金在货币资金中的占比情况，可用于评估公司的外汇风险敞口\n• 基准：用于对比的基准线",
+                "description": "• 外币资金占货币资金比因子：反映公司外币资金在货币资金中的占比情况，用于描述公司海外业务形成的资金结构特征。\n• 基准：用于对比的基准线",
                 "lines": [
                     {
                         "name": "外币资金占货币资金比因子",
@@ -120,14 +127,14 @@ def build_data_and_config():
             },
             {
                 "id": "fund2",
-                "title": "保证金资金周转率",
-                "displayTitle": "保证金资金周转率 vs Wind全A收盘价",
+                "title": "博弈 / 存量",
+                "displayTitle": "博弈/存量 vs Wind全A收盘价",
                 "sheet": "资金图2",
                 "x": "Unnamed: 0",
-                "description": "• 保证金资金周转率：反映市场交易活跃度和资金利用效率。计算方式：保证金资金周转率 = 成交额 / 保证金余额（博弈/存量）\n• 上轨80分位数：80分位数参考线，用于判断资金周转率的高位水平\n• 下轨20分位数：20分位数参考线，用于判断资金周转率的低位水平\n• Wind全A收盘价（右轴）：Wind全A指数的收盘价，显示在右轴",
+                "description": "• 博弈/存量：反映市场交易活跃度和资金利用效率。计算方式：博弈/存量 = 成交额 / 保证金余额\n• 上轨80分位数：80分位数参考线，用于判断博弈/存量的高位水平\n• 下轨20分位数：20分位数参考线，用于判断博弈/存量的低位水平\n• Wind全A收盘价（右轴）：Wind全A指数的收盘价，显示在右轴",
                 "lines": [
                     {
-                        "name": "保证金资金周转率",
+                        "name": "博弈/存量",
                         "field": "博弈/存量",
                         "axis": "y1",
                     },
@@ -173,6 +180,33 @@ def build_data_and_config():
                 "description": "• X轴（预测ROE）：预测的净资产收益率，反映公司的盈利能力\n• Y轴（预测PB）：预测的市净率，反映公司的估值水平\n• 散点：每个散点代表一只股票，散点上的文字为股票名称",
             },
         ],
+        "量化资产配置": [
+            {
+                "id": "asset1",
+                "title": "中低波组合净值",
+                "displayTitle": "中低波组合净值 vs 基准",
+                "sheet": "资产配置净值",
+                "x": "date",
+                "description": "• 中波组合：中波动率组合的净值表现\n• 低波组合：低波动率组合的净值表现\n• 基准：资产风险平价基准，用于对比的基准线",
+                "lines": [
+                    {
+                        "name": "中波组合",
+                        "field": "中波组合",
+                        "axis": "y1",
+                    },
+                    {
+                        "name": "低波组合",
+                        "field": "低波组合",
+                        "axis": "y1",
+                    },
+                    {
+                        "name": "基准",
+                        "field": "资产风险平价",
+                        "axis": "y1",
+                    },
+                ],
+            },
+        ],
     }
 
     return data_by_sheet, chart_configs
@@ -195,7 +229,7 @@ def build_html(data_by_sheet, chart_configs):
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
-  <title>因子 / 风险 / 资金 图表看板</title>
+  <title>量化分析监控看板</title>
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
@@ -240,11 +274,12 @@ def build_html(data_by_sheet, chart_configs):
       font-size: 18px;
       font-weight: 600;
       margin-bottom: 2px;
+      letter-spacing: 2px;
     }}
     .header-title-sub {{
       font-size: 12px;
       color: #7f8c8d;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.1px;
     }}
     .layout {{
       flex: 1;
@@ -729,8 +764,8 @@ def build_html(data_by_sheet, chart_configs):
     <div class="header-left">
       <img src="data:image/png;base64,{logo_base64}" alt="NORTHEAST SECURITIES" class="header-logo">
       <div>
-        <div class="header-title-main">因子 / 资金 / 风险监控看板</div>
-        <div class="header-title-sub">Quant Research Dashboard</div>
+        <div class="header-title-main">量化分析监控看板</div>
+        <div class="header-title-sub">Quant Analysis Dashboard</div>
       </div>
     </div>
   </div>
@@ -803,6 +838,12 @@ def build_html(data_by_sheet, chart_configs):
         return '#FFABAB';
       }} else if (cfg.id === 'fund2' && lineName === '下轨20分位数') {{
         return '#B6E880';
+      }} else if (cfg.id === 'asset1' && lineName === '低波组合') {{
+        return '#B6E880';
+      }} else if (cfg.id === 'asset1' && lineName === '中波组合') {{
+        return '#005bac';
+      }} else if (cfg.id === 'asset1' && lineName === '基准') {{
+        return '#FFCB05';
       }} else if (lineName === '基准' || lineName === 'Wind全A收盘价（右轴）' || lineName === 'Wind全A收盘价' || lineName === '上证综指') {{
         return '#FFCB05';
       }} else {{
@@ -938,6 +979,8 @@ def build_html(data_by_sheet, chart_configs):
                 prefix = '资金图' + chartNum;
               }} else if (category === '风险') {{
                 prefix = '风险图' + chartNum;
+              }} else if (category === '量化资产配置') {{
+                prefix = '量化资产配置图' + chartNum;
               }}
               
               // 组合标识和标题
@@ -1079,6 +1122,7 @@ def build_html(data_by_sheet, chart_configs):
       const records = dataBySheet[cfg.sheet] || [];
       
       let traces, layout;
+      let hasY2 = false; // 默认值，避免作用域问题
       
       if (cfg.type === 'scatter') {{
         // 散点图模式
@@ -1200,6 +1244,12 @@ def build_html(data_by_sheet, chart_configs):
             trace.line = {{ color: '#FFABAB' }};
           }} else if (cfg.id === 'fund2' && lineCfg.name === '下轨20分位数') {{
             trace.line = {{ color: '#B6E880' }};
+          }} else if (cfg.id === 'asset1' && lineCfg.name === '低波组合') {{
+            trace.line = {{ color: '#B6E880' }};
+          }} else if (cfg.id === 'asset1' && lineCfg.name === '中波组合') {{
+            trace.line = {{ color: '#005bac' }};
+          }} else if (cfg.id === 'asset1' && lineCfg.name === '基准') {{
+            trace.line = {{ color: '#FFCB05' }};
           }} else if (lineCfg.name === '基准' || lineCfg.name === 'Wind全A收盘价（右轴）' || lineCfg.name === 'Wind全A收盘价' || lineCfg.axis === 'y2') {{
             trace.line = {{ color: '#FFCB05' }};
           }} else {{
@@ -1218,6 +1268,7 @@ def build_html(data_by_sheet, chart_configs):
         const isFund1Chart = cfg.id === 'fund1';
         const isFund2Chart = cfg.id === 'fund2';
         const isRisk1Chart = cfg.id === 'risk1';
+        const isAsset1Chart = cfg.id === 'asset1';
         // 如果没有右轴，右侧 margin 可以更紧凑
         const rightMargin = hasY2 ? 70 : 15;
 
@@ -1233,7 +1284,7 @@ def build_html(data_by_sheet, chart_configs):
             font: {{ color: '#666666' }}
           }},
           xaxis: {{
-            title: (isFactorChart || isFund1Chart || isFund2Chart || isRisk1Chart) ? '日期' : cfg.x,
+            title: (isFactorChart || isFund1Chart || isFund2Chart || isRisk1Chart || isAsset1Chart) ? '日期' : cfg.x,
             showgrid: true,
             gridcolor: '#ecf0f1',
             type: 'date',
@@ -1261,7 +1312,7 @@ def build_html(data_by_sheet, chart_configs):
           }},
           yaxis: {{
             title: {{
-              text: isFactorChart ? '净值' : (isFund1Chart ? '主力累计净买入(亿元)' : (isFund2Chart ? '保证金资金周转率' : (isRisk1Chart ? '新高个股占比' : ''))),
+              text: isFactorChart ? '净值' : (isFund1Chart ? '主力累计净买入(亿元)' : (isFund2Chart ? '博弈/存量' : (isRisk1Chart ? '新高个股占比' : (isAsset1Chart ? '净值' : '')))),
               standoff: 30
             }},
             showgrid: true,
@@ -1333,6 +1384,261 @@ def build_html(data_by_sheet, chart_configs):
               }}
             }}
           }}, 300);
+        }}
+
+        // 对于有基准线的折线图（因子图和量化资产配置图），添加时间范围选择时的归一化处理
+        const hasBenchmark = cfg.lines && cfg.lines.some(l => l.name === '基准');
+        const isBenchmarkChart = (cfg.id === 'factor1' || cfg.id === 'factor2' || cfg.id === 'asset1');
+        if (hasBenchmark && isBenchmarkChart && cfg.type !== 'scatter') {{
+          // 延迟绑定事件，确保图表完全加载
+          setTimeout(() => {{
+            const plotDiv = document.getElementById(containerId);
+            if (!plotDiv) return;
+
+            // 保存原始数据
+            const originalData = {{
+              x: records.map(r => r[cfg.x]),
+              traces: cfg.lines.map(lineCfg => ({{
+                name: lineCfg.name,
+                field: lineCfg.field,
+                y: records.map(r => {{
+                  const val = r[lineCfg.field];
+                  return val !== null && val !== undefined ? parseFloat(val) : null;
+                }})
+              }}))
+            }};
+
+            // 标记是否已归一化
+            let isNormalized = false;
+
+            // 归一化函数
+            function normalizeData(rangeStart, rangeEnd) {{
+              // 找到起始点索引：优先找范围内的第一个点，否则找最接近的点
+              let startIndex = -1;
+              let minDiff = Infinity;
+              let closestIndex = -1;
+              
+              for (let i = 0; i < originalData.x.length; i++) {{
+                const dateStr = originalData.x[i];
+                let date = null;
+                
+                // 尝试解析日期
+                if (typeof dateStr === 'string') {{
+                  date = new Date(dateStr);
+                }} else if (dateStr instanceof Date) {{
+                  date = dateStr;
+                }}
+                
+                if (date && !isNaN(date.getTime())) {{
+                  // 优先找范围内的第一个点
+                  if (date >= rangeStart && date <= rangeEnd) {{
+                    startIndex = i;
+                    break;
+                  }}
+                  
+                  // 同时记录最接近的点
+                  const diff = Math.abs(date.getTime() - rangeStart.getTime());
+                  if (diff < minDiff) {{
+                    minDiff = diff;
+                    closestIndex = i;
+                  }}
+                }}
+              }}
+
+              // 如果没找到范围内的点，使用最接近的点
+              if (startIndex < 0 && closestIndex >= 0) {{
+                startIndex = closestIndex;
+              }}
+
+              // 如果找到了起始点，进行归一化
+              if (startIndex >= 0) {{
+                // 准备所有更新数据，使用新的归一化逻辑
+                const yArrays = [];
+                const indices = [];
+                cfg.lines.forEach((lineCfg, idx) => {{
+                  const originalTrace = originalData.traces.find(t => t.name === lineCfg.name);
+                  if (originalTrace) {{
+                    // 初始化数组，复制原始值
+                    const normalizedY = originalTrace.y.slice();
+                    
+                    // 从起始点开始，逐日计算归一化值
+                    // 起始点：所有净值都取1
+                    // 后续每天：今日归一化值 = 昨日归一化值 * (今日原始值 / 昨日原始值)
+                    // 起始点之前：反向计算，今日归一化值 = 明日归一化值 * (今日原始值 / 明日原始值)
+                    
+                    // 先处理起始点及之后的数据（正向）
+                    for (let i = startIndex; i < originalTrace.y.length; i++) {{
+                      const currentValue = originalTrace.y[i];
+                      
+                      if (currentValue === null || currentValue === undefined || isNaN(currentValue)) {{
+                        continue;
+                      }}
+                      
+                      if (i === startIndex) {{
+                        // 起始点：设为1
+                        normalizedY[i] = 1;
+                      }} else {{
+                        // 起始点之后的数据：按涨跌幅累乘
+                        const prevValue = originalTrace.y[i - 1];
+                        if (prevValue !== null && prevValue !== undefined && !isNaN(prevValue) && prevValue !== 0) {{
+                          // 今日归一化值 = 昨日归一化值 * (今日原始值 / 昨日原始值)
+                          const prevNormalized = normalizedY[i - 1];
+                          if (prevNormalized !== null && prevNormalized !== undefined && !isNaN(prevNormalized)) {{
+                            normalizedY[i] = prevNormalized * (currentValue / prevValue);
+                          }}
+                        }}
+                      }}
+                    }}
+                    
+                    // 再处理起始点之前的数据（反向）
+                    for (let i = startIndex - 1; i >= 0; i--) {{
+                      const currentValue = originalTrace.y[i];
+                      
+                      if (currentValue === null || currentValue === undefined || isNaN(currentValue)) {{
+                        continue;
+                      }}
+                      
+                      // 起始点之前的数据：反向计算
+                      const nextValue = originalTrace.y[i + 1];
+                      if (nextValue !== null && nextValue !== undefined && !isNaN(nextValue) && nextValue !== 0) {{
+                        // 今日归一化值 = 明日归一化值 * (今日原始值 / 明日原始值)
+                        const nextNormalized = normalizedY[i + 1];
+                        if (nextNormalized !== null && nextNormalized !== undefined && !isNaN(nextNormalized)) {{
+                          normalizedY[i] = nextNormalized * (currentValue / nextValue);
+                        }}
+                      }}
+                    }}
+                    
+                    yArrays.push(normalizedY);
+                    indices.push(idx);
+                  }}
+                }});
+                
+                // 批量更新所有 traces，使用正确的格式
+                if (yArrays.length > 0) {{
+                  Plotly.restyle(containerId, {{ y: yArrays }}, indices);
+                  isNormalized = true;
+                }}
+              }}
+            }}
+
+            // 恢复原始数据函数
+            function restoreData() {{
+              if (isNormalized) {{
+                // 准备所有恢复数据
+                const yArrays = [];
+                const indices = [];
+                cfg.lines.forEach((lineCfg, idx) => {{
+                  const originalTrace = originalData.traces.find(t => t.name === lineCfg.name);
+                  if (originalTrace) {{
+                    yArrays.push(originalTrace.y);
+                    indices.push(idx);
+                  }}
+                }});
+                
+                // 批量恢复所有 traces
+                if (yArrays.length > 0) {{
+                  Plotly.restyle(containerId, {{ y: yArrays }}, indices);
+                  isNormalized = false;
+                }}
+              }}
+            }}
+
+            // 保存原始数据的完整范围
+            const originalXMin = originalData.x.length > 0 ? new Date(originalData.x[0]) : null;
+            const originalXMax = originalData.x.length > 0 ? new Date(originalData.x[originalData.x.length - 1]) : null;
+
+            // 监听布局变化事件
+            plotDiv.on('plotly_relayout', function(eventData) {{
+              // 延迟处理，确保范围已更新
+              setTimeout(() => {{
+                try {{
+                  // 检查是否是恢复到全部范围（点击"全部"按钮）
+                  if (eventData['xaxis.autorange'] === true) {{
+                    restoreData();
+                    return;
+                  }}
+
+                  // 检查当前布局中的范围
+                  const layout = plotDiv.layout;
+                  if (!layout || !layout.xaxis) return;
+
+                  let rangeStart = null;
+                  let rangeEnd = null;
+                  
+                  // 优先从事件数据中获取范围
+                  if (eventData['xaxis.range[0]'] !== undefined && eventData['xaxis.range[1]'] !== undefined) {{
+                    rangeStart = new Date(eventData['xaxis.range[0]']);
+                    rangeEnd = new Date(eventData['xaxis.range[1]']);
+                  }} else if (eventData['xaxis.range'] && Array.isArray(eventData['xaxis.range'])) {{
+                    rangeStart = new Date(eventData['xaxis.range'][0]);
+                    rangeEnd = new Date(eventData['xaxis.range'][1]);
+                  }} else if (layout.xaxis.range && Array.isArray(layout.xaxis.range)) {{
+                    // 从布局中获取当前范围
+                    rangeStart = new Date(layout.xaxis.range[0]);
+                    rangeEnd = new Date(layout.xaxis.range[1]);
+                  }} else {{
+                    return; // 无法获取范围，退出
+                  }}
+
+                  // 检查是否是全部范围（通过比较与原始数据的范围）
+                  if (originalXMin && originalXMax) {{
+                    const timeDiff = 86400000; // 1天的毫秒数，允许误差
+                    const isFullRange = Math.abs(rangeStart.getTime() - originalXMin.getTime()) < timeDiff && 
+                                       Math.abs(rangeEnd.getTime() - originalXMax.getTime()) < timeDiff;
+                    
+                    if (isFullRange) {{
+                      restoreData();
+                      return;
+                    }}
+                  }}
+
+                  // 如果有有效的时间范围，进行归一化
+                  if (rangeStart && rangeEnd && !isNaN(rangeStart.getTime()) && !isNaN(rangeEnd.getTime())) {{
+                    normalizeData(rangeStart, rangeEnd);
+                  }}
+                }} catch (e) {{
+                  console.error('Error in normalize handler:', e);
+                }}
+              }}, 300);
+            }});
+
+            // 额外监听：直接监听 rangeselector 按钮点击（备用方案）
+            setTimeout(() => {{
+              const plotDiv = document.getElementById(containerId);
+              if (!plotDiv) return;
+              
+              // 查找 rangeselector 按钮
+              const rangeSelector = plotDiv.querySelector('.rangeselector');
+              if (rangeSelector) {{
+                const buttons = rangeSelector.querySelectorAll('button');
+                buttons.forEach(button => {{
+                  button.addEventListener('click', function() {{
+                    setTimeout(() => {{
+                      const layout = plotDiv.layout;
+                      if (layout && layout.xaxis && layout.xaxis.range && Array.isArray(layout.xaxis.range)) {{
+                        const rangeStart = new Date(layout.xaxis.range[0]);
+                        const rangeEnd = new Date(layout.xaxis.range[1]);
+                        
+                        // 检查是否是全部范围
+                        if (originalXMin && originalXMax) {{
+                          const timeDiff = 86400000;
+                          const isFullRange = Math.abs(rangeStart.getTime() - originalXMin.getTime()) < timeDiff && 
+                                             Math.abs(rangeEnd.getTime() - originalXMax.getTime()) < timeDiff;
+                          
+                          if (isFullRange) {{
+                            restoreData();
+                          }} else if (!isNaN(rangeStart.getTime()) && !isNaN(rangeEnd.getTime())) {{
+                            normalizeData(rangeStart, rangeEnd);
+                          }}
+                        }}
+                      }}
+                    }}, 400);
+                  }});
+                }});
+              }}
+            }}, 1000);
+          }}, 500);
         }}
       }});
     }}
@@ -1597,12 +1903,16 @@ def build_html(data_by_sheet, chart_configs):
               behavior: 'smooth'
             }});
             
-            // 触发图表resize，确保双坐标轴图表正确布局
-            const chartDiv = document.getElementById(`plot-${{chartId}}`);
-            if (chartDiv && chartInstances[chartId]) {{
-              setTimeout(() => {{
-                Plotly.Plots.resize(`plot-${{chartId}}`);
-              }}, 100);
+            // 触发该板块内所有图表的resize，确保所有图表都能正确调整大小
+            if (chartConfigs[category]) {{
+              chartConfigs[category].forEach(cfg => {{
+                const chartDiv = document.getElementById(`plot-${{cfg.id}}`);
+                if (chartDiv && chartInstances[cfg.id]) {{
+                  setTimeout(() => {{
+                    Plotly.Plots.resize(`plot-${{cfg.id}}`);
+                  }}, 100);
+                }}
+              }});
             }}
           }}
         }}, 50);
