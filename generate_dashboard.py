@@ -8,6 +8,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parent
 EXCEL_PATH = ROOT / "作图数据整理.xlsx"
 PBROE_PATH = ROOT / "PB-ROE和资产组合净值.xlsx"
+FUND_PATH = ROOT / "公募主动权益基金规模和份额变化.xlsx"
 LOGO_PATH = ROOT / "logo.png"
 # 输出的主页面文件名（GitHub Pages 默认会使用 index.html 作为首页）
 DASHBOARD_HTML = ROOT / "dashboard.html"
@@ -88,6 +89,17 @@ def build_data_and_config():
         if "资产配置净值" in pb_roe_xls.sheet_names:
             asset_df = pd.read_excel(PBROE_PATH, sheet_name="资产配置净值")
             data_by_sheet["资产配置净值"] = sheet_to_records(asset_df)
+    
+    # 读取公募主动权益基金数据
+    if FUND_PATH.exists():
+        fund_xls = pd.ExcelFile(FUND_PATH)
+        # 读取"规模变化"和"份额变化"两个sheet
+        if "规模变化(单位 亿)" in fund_xls.sheet_names:
+            fund_df1 = pd.read_excel(FUND_PATH, sheet_name="规模变化(单位 亿)")
+            data_by_sheet["规模变化(单位 亿)"] = sheet_to_records(fund_df1)
+        if "份额变化(单位 亿)" in fund_xls.sheet_names:
+            fund_df2 = pd.read_excel(FUND_PATH, sheet_name="份额变化(单位 亿)")
+            data_by_sheet["份额变化(单位 亿)"] = sheet_to_records(fund_df2)
 
     # 图表配置：说明每张图的 x 轴、y 轴字段及含义
     chart_configs = {
@@ -228,6 +240,26 @@ def build_data_and_config():
                 ],
             },
         ],
+        "权益基金市场跟踪": [
+            {
+                "id": "fund_market1",
+                "title": "规模变化",
+                "displayTitle": "公募主动权益基金规模变化",
+                "sheet": "规模变化(单位 亿)",
+                "x": "Unnamed: 0",
+                "type": "bar",
+                "description": "• 指数增强型：以跟踪特定指数为主，同时通过主动管理策略获取超越指数的收益\n• 灵活配置型：股票资产占基金资产的比例在0%-95%之间，可根据市场情况灵活调整资产配置\n• 偏股混合型：股票资产占基金资产的比例在60%-80%之间，兼具股票和债券投资\n• 普通股票型：主要投资于股票市场，股票资产占基金资产的比例不低于80%",
+            },
+            {
+                "id": "fund_market2",
+                "title": "份额变化",
+                "displayTitle": "公募主动权益基金份额变化",
+                "sheet": "份额变化(单位 亿)",
+                "x": "Unnamed: 0",
+                "type": "bar",
+                "description": "• 指数增强型：以跟踪特定指数为主，同时通过主动管理策略获取超越指数的收益\n• 灵活配置型：股票资产占基金资产的比例在0%-95%之间，可根据市场情况灵活调整资产配置\n• 偏股混合型：股票资产占基金资产的比例在60%-80%之间，兼具股票和债券投资\n• 普通股票型：主要投资于股票市场，股票资产占基金资产的比例不低于80%",
+            },
+        ],
     }
 
     return data_by_sheet, chart_configs
@@ -363,7 +395,7 @@ def build_html(data_by_sheet, chart_configs):
       font-weight: 600;
       margin: 16px 0 6px;
       text-transform: uppercase;
-      letter-spacing: 1px;
+      letter-spacing: 0.5px;
       color: #333333;
     }}
     .nav-list {{
@@ -371,7 +403,7 @@ def build_html(data_by_sheet, chart_configs):
     }}
     .nav-item {{
       padding: 8px 10px 8px 0;
-      margin-bottom: 4px;
+      margin-bottom: 0px;
       border-radius: 0;
       font-size: 15px;
       cursor: pointer;
@@ -777,6 +809,11 @@ def build_html(data_by_sheet, chart_configs):
         height: 350px;
         padding: 6px;
       }}
+      /* 隐藏合计值的颜色方块 */
+      .js-plotly-plot .hovertext g:has(text:contains("合计")) rect,
+      .js-plotly-plot .hovertext g:has(text:contains("合计")) circle {{
+        display: none !important;
+      }}
     }}
   </style>
 </head>
@@ -855,6 +892,18 @@ def build_html(data_by_sheet, chart_configs):
 
     // 根据线条名称获取颜色
     function getLineColor(cfg, lineName) {{
+      // 柱状图的颜色映射
+      if (cfg.type === 'bar' && (cfg.id === 'fund_market1' || cfg.id === 'fund_market2')) {{
+        const barColorMap = {{
+          '普通股票型': '#005bac',      // 蓝色
+          '偏股混合型': '#FFCB05',      // 黄色
+          '灵活配置型': '#B6E880',      // 浅绿色
+          '指数增强型': '#FFABAB'       // 浅红色
+        }};
+        return barColorMap[lineName] || '#005bac';
+      }}
+      
+      // 其他图表的颜色
       if (cfg.id === 'fund2' && lineName === '上轨80分位数') {{
         return '#FFABAB';
       }} else if (cfg.id === 'fund2' && lineName === '下轨20分位数') {{
@@ -894,11 +943,11 @@ def build_html(data_by_sheet, chart_configs):
           let color = null;
           
           // 查找对应的线条名称
+          // 先尝试精确匹配：提取冒号前的部分
+          const colonIndex = text.indexOf('：');
+          const beforeColon = colonIndex > 0 ? text.substring(0, colonIndex).trim() : text.trim();
+          
           if (cfg.lines) {{
-            // 先尝试精确匹配：提取冒号前的部分
-            const colonIndex = text.indexOf('：');
-            const beforeColon = colonIndex > 0 ? text.substring(0, colonIndex).trim() : text.trim();
-            
             // 优先精确匹配
             for (let lineCfg of cfg.lines) {{
               if (beforeColon === lineCfg.name) {{
@@ -930,6 +979,10 @@ def build_html(data_by_sheet, chart_configs):
                 }}
               }}
             }}
+          }} else if (cfg.type === 'bar') {{
+            // 对于柱状图，直接使用冒号前的部分作为字段名称
+            lineName = beforeColon;
+            color = getLineColor(cfg, lineName);
           }}
           
           // 如果找到了颜色，生成带颜色标识的HTML
@@ -1097,17 +1150,15 @@ def build_html(data_by_sheet, chart_configs):
                   prefix = '风险图' + chartNum;
                 }} else if (category === '量化资产配置') {{
                   prefix = '量化资产配置图' + chartNum;
+                }} else if (category === '权益基金市场跟踪') {{
+                  prefix = '权益基金图' + chartNum;
                 }}
                 
                 // 组合标识和标题
                 let sheetName = prefix;
                 if (cfg.title) {{
-                  // 如果sheet名称已经包含标题，直接使用sheet名称
-                  if (cfg.sheet && cfg.sheet.includes(cfg.title)) {{
-                    sheetName = cfg.sheet;
-                  }} else {{
-                    sheetName = prefix + '-' + cfg.title;
-                  }}
+                  // 统一使用 prefix + '-' + title 格式
+                  sheetName = prefix + '-' + cfg.title;
                 }} else {{
                   // 如果没有title，使用sheet名称
                   sheetName = cfg.sheet || prefix;
@@ -1256,6 +1307,7 @@ def build_html(data_by_sheet, chart_configs):
       
       let traces, layout;
       let hasY2 = false; // 默认值，避免作用域问题
+      let barsToUse = []; // 用于柱状图，在回调中访问
       
       if (cfg.type === 'scatter') {{
         // 散点图模式
@@ -1355,6 +1407,203 @@ def build_html(data_by_sheet, chart_configs):
             hoverformat: '.4f'
           }},
           hovermode: 'closest',
+        }};
+      }} else if (cfg.type === 'bar') {{
+        // 柱状图模式
+        const x = records.map(r => r[cfg.x]);
+        
+        // 如果配置了bars，使用配置；否则自动检测所有数值列
+        barsToUse = cfg.bars || [];
+        let totalScaleField = null;
+        
+        if (barsToUse.length === 0 && records.length > 0) {{
+          // 自动检测所有数值列（排除x轴列）
+          const allHeaders = Object.keys(records[0] || {{}});
+          const xField = cfg.x;
+          
+          // 查找"合计规模"或包含"合计"的列，作为右轴面积图
+          for (let header of allHeaders) {{
+            if (header !== xField && (header.includes('合计') || header.includes('总计') || header.includes('合计规模'))) {{
+              totalScaleField = header;
+              break;
+            }}
+          }}
+          
+          // 其他列作为左轴堆叠柱状图
+          // 对于份额变化图表，排除"份额变化"字段
+          const excludeFields = cfg.id === 'fund_market2' ? ['份额变化'] : [];
+          const filteredHeaders = allHeaders
+            .filter(header => header !== xField && header !== totalScaleField && !excludeFields.includes(header));
+          
+          // 定义字段顺序：普通股票型、偏股混合型、灵活配置型、指数增强型（从下到上堆叠）
+          // 这样hover显示时从上到下就是：指数增强型、灵活配置型、偏股混合型、普通股票型
+          const fieldOrder = ['普通股票型', '偏股混合型', '灵活配置型', '指数增强型'];
+          
+          // 按照指定顺序排序
+          const sortedHeaders = filteredHeaders.sort((a, b) => {{
+            const indexA = fieldOrder.indexOf(a);
+            const indexB = fieldOrder.indexOf(b);
+            // 如果字段在顺序列表中，按顺序排序；否则放在最后
+            if (indexA !== -1 && indexB !== -1) {{
+              return indexA - indexB;
+            }} else if (indexA !== -1) {{
+              return -1;
+            }} else if (indexB !== -1) {{
+              return 1;
+            }} else {{
+              return 0;
+            }}
+          }});
+          
+          barsToUse = sortedHeaders.map(header => ({{
+            name: header,
+            field: header,
+            axis: 'y1'
+          }}));
+        }}
+        
+        traces = [];
+        
+        // 计算每个x位置的合计值（用于hover显示）
+        let totalValues = null;
+        if (totalScaleField) {{
+          // 如果有合计字段，直接使用
+          totalValues = records.map(r => {{
+            const val = r[totalScaleField];
+            return val !== null && val !== undefined ? parseFloat(val) || 0 : 0;
+          }});
+        }} else {{
+          // 如果没有合计字段，计算所有堆叠柱状图的总和
+          const allYValues = barsToUse.map(barCfg => {{
+            return records.map(r => {{
+              const val = r[barCfg.field];
+              return val !== null && val !== undefined ? parseFloat(val) || 0 : 0;
+            }});
+          }});
+          // 计算每个x位置的总和
+          totalValues = x.map((_, idx) => {{
+            return allYValues.reduce((sum, yArray) => sum + (yArray[idx] || 0), 0);
+          }});
+        }}
+        
+        // 添加堆叠柱状图（左轴）
+        // 颜色顺序：普通股票型(蓝色)、偏股混合型(黄色)、灵活配置型(浅绿色)、指数增强型(浅红色)
+        const barColors = ['#005bac', '#FFCB05', '#B6E880', '#FFABAB'];
+        
+        // 先按照正常顺序创建traces（从下到上堆叠：普通、偏股、灵活、指数）
+        const barTraces = [];
+        barsToUse.forEach((barCfg, idx) => {{
+          const y = records.map(r => {{
+            const val = r[barCfg.field];
+            return val !== null && val !== undefined ? parseFloat(val) || 0 : 0;
+          }});
+          
+          barTraces.push({{
+            x,
+            y,
+            type: 'bar',
+            name: barCfg.name,
+            marker: {{
+              color: getLineColor(cfg, barCfg.name) || barColors[idx % barColors.length]
+            }},
+            yaxis: 'y',
+            hovertemplate: '%{{fullData.name}}: %{{y:,.2f}}<extra></extra>'
+          }});
+        }});
+        
+        // 反转traces顺序，使hover从上到下显示为：指数、灵活、偏股、普通
+        // 但通过调整堆叠方式保持堆叠顺序不变（从下到上：普通、偏股、灵活、指数）
+        // 注意：Plotly的堆叠顺序与traces顺序相同，所以我们需要反转顺序
+        // 但为了保持堆叠顺序不变，我们需要使用base属性来调整堆叠基准
+        const reversedBarTraces = barTraces.reverse();
+        
+        // 重新计算每个trace的base值，使堆叠顺序保持不变
+        // 从下到上应该是：普通、偏股、灵活、指数
+        // 但traces顺序是：指数、灵活、偏股、普通
+        // 所以需要为每个trace设置正确的base值
+        reversedBarTraces.forEach((trace, idx) => {{
+          // 计算base值：需要累加前面所有trace的值
+          const baseValues = x.map((_, xIdx) => {{
+            let base = 0;
+            // 从最后一个trace到当前trace之前的所有trace的值
+            for (let i = reversedBarTraces.length - 1; i > idx; i--) {{
+              base += reversedBarTraces[i].y[xIdx] || 0;
+            }}
+            return base;
+          }});
+          trace.base = baseValues;
+        }});
+        
+        traces.push(...reversedBarTraces);
+        
+        // 添加一个隐藏的trace专门用于显示合计值（不显示颜色方块，左对齐）
+        if (totalValues) {{
+          traces.push({{
+            x,
+            y: new Array(x.length).fill(0), // 设置为0，但不显示
+            type: 'scatter',
+            mode: 'markers',
+            marker: {{
+              opacity: 0, // 完全透明，不显示
+              size: 0 // 大小为0
+            }},
+            name: '合计',
+            showlegend: false, // 不显示在图例中
+            hovertemplate: '合计: %{{customdata:,.2f}}<extra></extra>',
+            customdata: totalValues
+          }});
+        }}
+        
+        // 计算Y轴的最大值，确保柱状图底部紧贴X轴
+        const maxYValue = totalValues ? Math.max(...totalValues) : 0;
+        const yAxisMax = maxYValue > 0 ? maxYValue * 1.02 : 100; // 留2%的空间，避免柱状图顶部被截断
+
+        layout = {{
+          margin: {{ t: 30, r: 15, b: 80, l: 70 }},
+          showlegend: false,
+          dragmode: 'zoom',
+          plot_bgcolor: 'white',
+          paper_bgcolor: 'white',
+          hoverlabel: {{
+            bgcolor: 'white',
+            bordercolor: '#d0d0d0',
+            font: {{ color: '#666666' }}
+          }},
+          xaxis: {{
+            title: '日期',
+            showgrid: true,
+            gridcolor: '#ecf0f1',
+            type: 'category',
+            showline: true,
+            linecolor: '#ecf0f1',
+            linewidth: 1,
+            mirror: true,
+            titlefont: {{ color: '#666666', size: 15 }},
+            tickfont: {{ color: '#666666' }},
+            zeroline: false,
+            autorange: false,
+            range: [-0.3, x.length - 0.7] // 减少与Y轴的间隙，让柱状图更靠近Y轴
+          }},
+          yaxis: {{
+            title: {{
+              text: cfg.id === 'fund_market1' ? '规模（亿）' : (cfg.id === 'fund_market2' ? '份额（亿）' : (barsToUse[0]?.name || '数值')),
+              standoff: 30
+            }},
+            showgrid: true,
+            gridcolor: '#ecf0f1',
+            showline: true,
+            linecolor: '#ecf0f1',
+            linewidth: 1,
+            mirror: true,
+            titlefont: {{ color: '#666666', size: 15 }},
+            tickfont: {{ color: '#666666' }},
+            zeroline: false,
+            hoverformat: '.2f',
+            autorange: false,
+            range: [0, yAxisMax] // 从0开始，确保柱状图底部紧贴X轴
+          }},
+          hovermode: 'x unified',
+          barmode: 'stack'  // 堆叠柱状图
         }};
       }} else {{
         // 折线图模式（原有逻辑）
@@ -1488,6 +1737,41 @@ def build_html(data_by_sheet, chart_configs):
       }}).then(() => {{
         // 标记该图表已创建
         chartInstances[cfg.id] = true;
+
+        // 对于柱状图，隐藏合计值的颜色方块，并更新说明面板添加颜色指示
+        if (cfg.type === 'bar') {{
+          const plotDiv = document.getElementById(containerId);
+          if (plotDiv) {{
+            // 使用MutationObserver监听hover的变化
+            const hideTotalColor = () => {{
+              const hovertexts = plotDiv.querySelectorAll('.hovertext');
+              hovertexts.forEach(hovertext => {{
+                const groups = hovertext.querySelectorAll('g');
+                groups.forEach(group => {{
+                  const text = group.querySelector('text');
+                  if (text && text.textContent && text.textContent.includes('合计')) {{
+                    // 隐藏同一组中的rect或circle（颜色方块）
+                    const rect = group.querySelector('rect');
+                    const circle = group.querySelector('circle');
+                    if (rect) rect.style.display = 'none';
+                    if (circle) circle.style.display = 'none';
+                  }}
+                }});
+              }});
+            }};
+            
+            // 立即执行一次
+            setTimeout(hideTotalColor, 100);
+            
+            // 监听DOM变化
+            const observer = new MutationObserver(hideTotalColor);
+            observer.observe(plotDiv, {{ childList: true, subtree: true }});
+            
+            // 监听鼠标移动事件
+            plotDiv.addEventListener('mousemove', hideTotalColor);
+            
+          }}
+        }}
 
         // 对于有双坐标轴的图表，手动触发resize以确保正确布局
         if (hasY2) {{
@@ -1933,6 +2217,9 @@ def build_html(data_by_sheet, chart_configs):
           if (cfg.type === 'scatter') {{
             // 散点图图标 - 分散排列，不是斜线
             icon.innerHTML = '<svg viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="4" r="1.5"/><circle cx="10" cy="8" r="1.5"/><circle cx="6" cy="13" r="1.5"/></svg>';
+          }} else if (cfg.type === 'bar') {{
+            // 柱状图图标（3个柱）
+            icon.innerHTML = '<svg viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="8" width="2" height="6"/><rect x="7" y="3" width="2" height="11"/><rect x="11" y="6" width="2" height="8"/></svg>';
           }} else {{
             // 折线图图标
             icon.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,12 5,8 8,10 12,4 14,6"/></svg>';
